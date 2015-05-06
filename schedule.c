@@ -159,6 +159,7 @@ schedule_select(struct schedule *s, taskid id, int n, channelid *channels) {
 				release_channel(s, channels[i]);
 			}
 		}
+		t->status = TASK_BLOCKED;
 		// add id to all channels' reader
 		for (i=0;i<n;i++) {
 			struct channel * c = handlemap_grab(s->channel, channels[i]);

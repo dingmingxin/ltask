@@ -339,6 +339,7 @@ wb_table_hash(lua_State *L, struct write_block * wb, int index, int depth, int a
 
 static void
 wb_table(lua_State *L, struct write_block *wb, int index, int depth) {
+	luaL_checkstack(L,LUA_MINSTACK,NULL);
 	if (index < 0) {
 		index = lua_gettop(L) + index + 1;
 	}
@@ -525,6 +526,7 @@ _unpack_table(lua_State *L, struct read_block *rb, int array_size) {
 		}
 		array_size = get_integer(L,rb,cookie);
 	}
+	luaL_checkstack(L,LUA_MINSTACK,NULL);
 	lua_createtable(L,array_size,0);
 	int i;
 	for (i=1;i<=array_size;i++) {
@@ -613,8 +615,8 @@ seri_unpack(lua_State *L) {
 
 	int i;
 	for (i=0;;i++) {
-		if (i%16==15) {
-			lua_checkstack(L,i);
+		if (i%8==7) {
+			luaL_checkstack(L,LUA_MINSTACK,NULL);
 		}
 		uint8_t type = 0;
 		uint8_t *t = rb_read(&rb, &type, 1);
@@ -627,141 +629,3 @@ seri_unpack(lua_State *L) {
 
 	return lua_gettop(L);
 }
-
-/*
-
-static int
-_dump_mem(const char * buffer, int len, int size) {
-	int i;
-	for (i=0;i<len && i<size;i++) {
-		printf("%02x ",(unsigned char)buffer[i]);
-	}
-	return size - len;
-}
-
-static int
-_dump(lua_State *L) {
-	struct block *b = lua_touserdata(L,1);
-	if (b==NULL) {
-		return luaL_error(L, "dump null pointer");
-	}
-	int len = 0;
-	memcpy(&len, b->buffer ,sizeof(len));
-	len -= sizeof(len);
-	printf("Len = %d\n",len);
-	len = _dump_mem(b->buffer + sizeof(len), BLOCK_SIZE - sizeof(len) , len);
-	while (len > 0) {
-		b=b->next;
-		len = _dump_mem(b->buffer, BLOCK_SIZE , len);
-	}
-	printf("\n");
-	return 0;
-}
-
-static int
-_serialize(lua_State *L) {
-	struct block *b = lua_touserdata(L,1);
-	if (b==NULL) {
-		return luaL_error(L, "dump null pointer");
-	}
-
-	uint32_t len = 0;
-	memcpy(&len, b->buffer ,sizeof(len));
-
-	uint8_t * buffer = malloc(len);
-	uint8_t * ptr = buffer;
-	int sz = len;
-	while(len>0) {
-		if (len >= BLOCK_SIZE) {
-			memcpy(ptr, b->buffer, BLOCK_SIZE);
-			ptr += BLOCK_SIZE;
-			len -= BLOCK_SIZE;
-		} else {
-			memcpy(ptr, b->buffer, len);
-			break;
-		}
-		b = b->next;
-	}
-
-	buffer[0] = sz & 0xff;
-	buffer[1] = (sz>>8) & 0xff;
-	buffer[2] = (sz>>16) & 0xff;
-	buffer[3] = (sz>>24) & 0xff;
-	
-	lua_pushlightuserdata(L, buffer);
-	lua_pushinteger(L, sz);
-
-	return 2;
-}
-
-static void
-deserialize_buffer(lua_State *L, void * buffer) {
-	struct read_block rb;
-	rball_init(&rb, buffer);
-
-	int i;
-	for (i=0;;i++) {
-		if (i%16==15) {
-			lua_checkstack(L,i);
-		}
-		uint8_t type = 0;
-		uint8_t *t = rb_read(&rb, &type, 1);
-		if (t==NULL)
-			break;
-		_push_value(L, &rb, *t & 0x7, *t>>3);
-	}
-}
-
-static int
-_deserialize(lua_State *L) {
-	void * buffer = lua_touserdata(L,1);
-	if (buffer == NULL) {
-		return luaL_error(L, "deserialize null pointer");
-	}
-
-	lua_settop(L,0);
-	deserialize_buffer(L, buffer);
-
-	// Need not free buffer
-
-	return lua_gettop(L);
-}
-
-static int
-seristring(lua_State *L) {
-	_pack(L);
-	lua_replace(L, 1);
-	lua_settop(L, 1);
-	_serialize(L);
-	void *buffer = lua_touserdata(L, -2);
-	int sz = lua_tointeger(L, -1);
-	lua_pushlstring(L, buffer, sz);
-	free(buffer);
-	return 1;
-}
-
-static int
-deseristring(lua_State *L) {
-	const char * buffer = luaL_checkstring(L, 1);
-	deserialize_buffer(L, (void *)buffer);
-
-	return lua_gettop(L) - 1;
-}
-
-int
-luaopen_serialize(lua_State *L) {
-	luaL_Reg l[] = {
-		{ "pack", _pack },
-		{ "unpack", _unpack },
-		{ "append", _append },
-		{ "serialize", _serialize },
-		{ "deserialize", _deserialize },
-		{ "serialize_string", seristring },
-		{ "deseristring_string", deseristring },
-		{ "dump", _dump },
-		{ NULL, NULL },
-	};
-	luaL_newlib(L,l);
-	return 1;
-}
-*/

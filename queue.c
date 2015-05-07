@@ -77,6 +77,9 @@ queue_push(struct queue *q, void* ud) {
 
 void *
 queue_pop(struct queue *q) {
+	if (q->head == q->tail) {
+		return NULL;
+	}
 	spin_lock(q);
 	if (q->head == q->tail) {
 		spin_unlock(q);

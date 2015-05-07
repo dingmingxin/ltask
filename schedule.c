@@ -1,6 +1,7 @@
 #include "schedule.h"
 #include "queue.h"
 #include "handlemap.h"
+#include "simplelock.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -68,9 +69,10 @@ release_task(struct schedule *s, taskid id) {
 }
 
 static void
-commit_task(struct schedule *s, struct task *t) {
-	t->status = TASK_READY;
-	queue_push(s->q[t->thread], (void *)(uintptr_t)(t->id));
+commit_task(struct schedule *s, struct task *t, int status) {
+	if (atom_cas_long(&t->status, status, TASK_READY)) {
+		queue_push(s->q[t->thread], (void *)(uintptr_t)(t->id));
+	}
 }
 
 taskid
@@ -85,7 +87,7 @@ schedule_opentask(struct schedule * s, void *ud) {
 	t->status = TASK_INIT;
 	t->ud = ud;
 	t->id = handlemap_new(s->task, t);
-	commit_task(s, t);
+	commit_task(s, t, TASK_INIT);
 	return t->id;
 }
 
@@ -127,7 +129,7 @@ schedule_releasetask(struct schedule *s, taskid id) {
 	if (t) {
 		assert(t->status != TASK_READY);
 		if (t->status == TASK_RUNNING) {
-			commit_task(s, t);
+			commit_task(s, t, TASK_RUNNING);
 		}
 		release_task(s, id);
 	}
@@ -213,6 +215,19 @@ schedule_send(struct schedule *s, channelid id, void *msg) {
 	struct channel *c = handlemap_grab(s->channel, id);
 	if (c) {
 		queue_push(c->mq, msg);
+		for (;;) {
+			// wake up blocked tasks
+			uintptr_t id = (uintptr_t)queue_pop(c->reader);
+			if (id == 0)
+				break;
+			struct task * t = handlemap_grab(s->task, id);
+			if (t) {
+				if (t->status == TASK_BLOCKED) {
+					commit_task(s, t, TASK_BLOCKED);
+				}
+				release_task(s, id);
+			}
+		}
 		release_channel(s,id);
 	}
 }
